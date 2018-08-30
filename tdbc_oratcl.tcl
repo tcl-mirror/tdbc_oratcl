@@ -3,7 +3,7 @@ package require Tcl 8.6
 package require tdbc
 package require Oratcl
 
-package provide tdbc::oratcl 0.1
+package provide tdbc::oratcl 0.2
 
 
 ::namespace eval ::tdbc::oratcl {
@@ -34,39 +34,62 @@ package provide tdbc::oratcl 0.1
     oralogoff $orahdl
     return [next]
   }
+  
+  
+  method splitOwnerAndTable {ownerAndTable refOwner refTable} {
+    upvar $refOwner owner
+    upvar $refTable table
+    lassign [split [string toupper $ownerAndTable] .] part1 part2
+    if {$part2 eq {}} {
+      set owner %
+      set table $part1
+    } else {
+      set owner $part1
+      set table $part2
+    }
+  }
 
 
   method tables {{pattern %}} {
-    set sql {
+    my splitOwnerAndTable $pattern owner table
+    set ownerClause {}
+    if {$owner ne {}} {
+      set ownerClause {and OWNER = :owner_name}
+    }
+    set sql "
       select OWNER,TABLE_NAME 
         from All_Tables
-	where table_name like :table_name
-	order by OWNER,TABLE_NAME
-    }
+        where table_name like :table_name $ownerClause
+        order by OWNER,TABLE_NAME
+    "
     set cursor [oraopen $orahdl]
     orasql $cursor $sql -parseonly
-    orabindexec $cursor :table_name $pattern
+    orabindexec $cursor :owner_name $owner :table_name $table
     set result {}
     array set data {}
     while {[orafetch $cursor -dataarray data] == 0} {
-      lappend result $data(TABLE_NAME) [list owner $data(OWNER)]
+      lappend result $data(TABLE_NAME) [list owner $data(OWNER) table_name $data(TABLE_NAME)]
     }
     oraclose $cursor
     return $result
   }
 
 
-  method columns {table {pattern %}} {
-    set sql {
+  method columns {ownerAndTable {pattern %}} {
+    my splitOwnerAndTable $ownerAndTable owner table
+    set ownerClause {}
+    if {$owner ne {}} {
+      set ownerClause {and OWNER = :owner_name}
+    }
+    set sql "
       select COLUMN_ID,COLUMN_NAME,DATA_TYPE,DATA_LENGTH,DATA_PRECISION,DATA_SCALE,NULLABLE
         from ALL_TAB_COLS 
-	where TABLE_NAME = :table_name
-	  and COLUMN_NAME like :column_name
-	order by COLUMN_ID
-    }
+        where TABLE_NAME = :table_name and COLUMN_NAME like :column_name $ownerClause
+        order by COLUMN_ID
+    "
     set cursor [oraopen $orahdl]
     orasql $cursor $sql -parseonly
-    orabindexec $cursor :table_name $table :column_name $pattern
+    orabindexec $cursor :owner_name $owner :table_name $table :column_name $pattern
     set result [dict create]
     array set data {}
     while {[orafetch $cursor -dataarray data] == 0} {
@@ -100,7 +123,8 @@ package provide tdbc::oratcl 0.1
       dict set infos nullable [string equal $data(DATA_SCALE) Y]
       dict set infos oratype $data(DATA_TYPE)
       dict set infos oraid $data(COLUMN_ID)
-      dict set result $data(COLUMN_NAME) $infos
+      dict set infos column_name $data(COLUMN_NAME)
+      dict set result [string tolower $data(COLUMN_NAME)] $infos
     }
     oraclose $cursor
     return $result
@@ -202,7 +226,7 @@ package provide tdbc::oratcl 0.1
 
 
   method configure {args} {
-    puts [list method configure {*}$args ([llength $args] args)]
+    # puts [list method configure {*}$args ([llength $args] args)]
     set options {
       -longsize -bindsize -nullvalue -fetchrows -lobpsize -longpsize -utfmode -numbsize -datesize
     }
@@ -259,7 +283,7 @@ package provide tdbc::oratcl 0.1
   constructor {statement args} {
     # puts "resultset $args"
     set cursor [$statement getCursor]
-    set columns [oracols $cursor name]
+    set columns [string tolower [oracols $cursor name]]
     next
   }
 
@@ -284,7 +308,7 @@ package provide tdbc::oratcl 0.1
   }
 
 
-  method nextdict var {
+  method nextdict {varname} {
     upvar $varname data
     if {[orafetch $cursor -datavariable data] == 0} {
       set result [dict create]
