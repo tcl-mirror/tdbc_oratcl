@@ -3,7 +3,7 @@ package require Tcl 8.6
 package require tdbc
 package require Oratcl
 
-package provide tdbc::oratcl 0.3
+package provide tdbc::oratcl 0.4
 
 
 ::namespace eval ::tdbc::oratcl {
@@ -22,6 +22,9 @@ package provide tdbc::oratcl 0.3
   constructor {connectStr} {
     next
     set orahdl [oralogon $connectStr]
+    set cursor [oraopen $orahdl]
+    orasql $cursor {alter session set nls_date_format='YYYY-MM-DD HH24:MI:SS'}
+    oraclose $cursor
     # puts "orahdl = $orahdl"
   }
 
