@@ -3,7 +3,7 @@ package require Tcl 8.6
 package require tdbc
 package require Oratcl
 
-package provide tdbc::oratcl 0.2
+package provide tdbc::oratcl 0.3
 
 
 ::namespace eval ::tdbc::oratcl {
