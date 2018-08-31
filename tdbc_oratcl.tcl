@@ -186,6 +186,7 @@ package provide tdbc::oratcl 0.2
       }
     }
     set cursor [oraopen [$connection getDBhandle]]
+    oraconfig $cursor nullvalue {}
     set rc [oraparse $cursor $sqlcode]
     if {$rc != 0} {
       return -code error [list ORACLE error $rc on oraparse $sqlcode]
@@ -278,11 +279,12 @@ package provide tdbc::oratcl 0.2
 #
 ::oo::class create ::tdbc::oratcl::resultset {
   superclass ::tdbc::resultset
-  variable cursor columns
+  variable cursor columns nullvalue
 
   constructor {statement args} {
     # puts "resultset $args"
     set cursor [$statement getCursor]
+    set nullvalue [oraconfig $cursor nullvalue]
     set columns [string tolower [oracols $cursor name]]
     next
   }
@@ -313,7 +315,9 @@ package provide tdbc::oratcl 0.2
     if {[orafetch $cursor -datavariable data] == 0} {
       set result [dict create]
       foreach column $columns value $data {
-        dict set result $column $value
+	if {$value ne $nullvalue} {
+          dict set result $column $value
+	}
       }
       set data $result
       return 1
