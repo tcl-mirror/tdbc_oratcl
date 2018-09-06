@@ -3,7 +3,7 @@ package require Tcl 8.6
 package require tdbc
 package require Oratcl
 
-package provide tdbc::oratcl 0.4
+package provide tdbc::oratcl 0.5
 
 
 ::namespace eval ::tdbc::oratcl {
@@ -23,7 +23,7 @@ package provide tdbc::oratcl 0.4
     next
     set orahdl [oralogon $connectStr]
     set cursor [oraopen $orahdl]
-    orasql $cursor {alter session set nls_date_format='YYYY-MM-DD HH24:MI:SS'}
+    orasql $cursor {alter session set nls_date_format='YYYY-MM-DD'}
     oraclose $cursor
     # puts "orahdl = $orahdl"
   }
@@ -181,15 +181,12 @@ package provide tdbc::oratcl 0.4
   constructor {connection sqlcode} {
     # puts "statement constructor"
     next
-    set bindVars {}
-    foreach token [::tdbc::tokenize $sqlcode] {
-      if {[string index $token 0] in {$ : @}} {
-	# puts "token = $token"
-	lappend bindVars [string range $token 1 end]
-      }
-    }
+    set bindVars [lmap  token [::tdbc::tokenize $sqlcode] {
+      if {[string index $token 0] ni {$ : @}} continue
+      string range $token 1 end
+    }]
     set cursor [oraopen [$connection getDBhandle]]
-    oraconfig $cursor nullvalue {}
+    oraconfig $cursor nullvalue NULL
     set rc [oraparse $cursor $sqlcode]
     if {$rc != 0} {
       return -code error [list ORACLE error $rc on oraparse $sqlcode]
@@ -232,7 +229,7 @@ package provide tdbc::oratcl 0.4
   method configure {args} {
     # puts [list method configure {*}$args ([llength $args] args)]
     set options {
-      -longsize -bindsize -nullvalue -fetchrows -lobpsize -longpsize -utfmode -numbsize -datesize
+      -longsize -bindsize -fetchrows -lobpsize -longpsize -utfmode -numbsize -datesize
     }
     if {[llength $args] == 0} {
       return [concat $options]
@@ -306,7 +303,10 @@ package provide tdbc::oratcl 0.4
 
   method nextlist {varname} {
     upvar $varname data
-    if {[orafetch $cursor -datavariable data] == 0} {
+    if {[orafetch $cursor -datavariable rowData] == 0} {
+      set data [lmap value $rowData {
+        if {$value ne $nullvalue} { set value } 
+      }]
       return 1
     }
     return 0
@@ -315,12 +315,11 @@ package provide tdbc::oratcl 0.4
 
   method nextdict {varname} {
     upvar $varname data
-    if {[orafetch $cursor -datavariable data] == 0} {
+    if {[orafetch $cursor -datavariable rowData] == 0} {
       set result [dict create]
-      foreach column $columns value $data {
-	if {$value ne $nullvalue} {
-          dict set result $column $value
-	}
+      foreach column $columns value $rowData {
+        if {$value eq $nullvalue} continue
+        dict set result $column $value
       }
       set data $result
       return 1
