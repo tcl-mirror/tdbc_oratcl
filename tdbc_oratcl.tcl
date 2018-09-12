@@ -3,7 +3,7 @@ package require Tcl 8.6
 package require tdbc
 package require Oratcl
 
-package provide tdbc::oratcl 0.5
+package provide tdbc::oratcl 0.6
 
 
 ::namespace eval ::tdbc::oratcl {
@@ -17,11 +17,15 @@ package provide tdbc::oratcl 0.5
 #
 ::oo::class create ::tdbc::oratcl::connection {
   superclass ::tdbc::connection
-  variable orahdl
+  variable orahdl user
 
   constructor {connectStr} {
     next
     set orahdl [oralogon $connectStr]
+    set user {}
+    if {[regexp {^(\w+)/} $connectStr all user]} {
+      set user [string toupper $user]
+    }
     set cursor [oraopen $orahdl]
     orasql $cursor {alter session set nls_date_format='YYYY-MM-DD'}
     oraclose $cursor
@@ -44,7 +48,7 @@ package provide tdbc::oratcl 0.5
     upvar $refTable table
     lassign [split [string toupper $ownerAndTable] .] part1 part2
     if {$part2 eq {}} {
-      set owner %
+      set owner $user
       set table $part1
     } else {
       set owner $part1
@@ -55,14 +59,10 @@ package provide tdbc::oratcl 0.5
 
   method tables {{pattern %}} {
     my splitOwnerAndTable $pattern owner table
-    set ownerClause {}
-    if {$owner ne {}} {
-      set ownerClause {and OWNER = :owner_name}
-    }
     set sql "
       select OWNER,TABLE_NAME 
         from All_Tables
-        where table_name like :table_name $ownerClause
+        where table_name like :table_name and OWNER = :owner_name
         order by OWNER,TABLE_NAME
     "
     set cursor [oraopen $orahdl]
@@ -80,14 +80,10 @@ package provide tdbc::oratcl 0.5
 
   method columns {ownerAndTable {pattern %}} {
     my splitOwnerAndTable $ownerAndTable owner table
-    set ownerClause {}
-    if {$owner ne {}} {
-      set ownerClause {and OWNER = :owner_name}
-    }
     set sql "
       select COLUMN_ID,COLUMN_NAME,DATA_TYPE,DATA_LENGTH,DATA_PRECISION,DATA_SCALE,NULLABLE
         from ALL_TAB_COLS 
-        where TABLE_NAME = :table_name and COLUMN_NAME like :column_name $ownerClause
+        where TABLE_NAME = :table_name and COLUMN_NAME like :column_name and OWNER = :owner_name
         order by COLUMN_ID
     "
     set cursor [oraopen $orahdl]
