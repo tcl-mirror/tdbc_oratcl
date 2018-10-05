@@ -28,6 +28,7 @@ package provide tdbc::oratcl 0.6
     }
     set cursor [oraopen $orahdl]
     orasql $cursor {alter session set nls_date_format='YYYY-MM-DD'}
+    orasql $cursor {alter session set nls_numeric_characters='. '}
     oraclose $cursor
     # puts "orahdl = $orahdl"
   }
