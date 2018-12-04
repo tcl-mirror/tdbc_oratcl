@@ -20,7 +20,12 @@ package provide tdbc::oratcl 0.6
   variable orahdl user
 
   constructor {connectStr} {
+    global env
+    
     next
+    if {$env(LANG) eq "de_DE.UTF-8"} {
+      set env(NLS_LANG) GERMAN_GERMANY.AL32UTF8
+    }
     set orahdl [oralogon $connectStr]
     set user {}
     if {[regexp {^(\w+)/} $connectStr all user]} {
